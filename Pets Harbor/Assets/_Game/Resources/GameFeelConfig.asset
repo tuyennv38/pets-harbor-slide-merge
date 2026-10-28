@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 968df7426b5826a45b250c427783eca7, type: 3}
+  m_Name: GameFeelConfig
+  m_EditorClassIdentifier: Assembly-CSharp::PetsHarbor.SlideMerge.GameFeelConfig
+  dragFollowSharpness: 55
+  maxWallLeashCells: 0.3
+  maxSlideStepPerFrame: 3.5
+  laneCenteringStrength: 0.6
+  idleMagneticPullStrength: 15
+  idleMagneticSpeedThreshold: 2.4
+  cornerChamferRange: 0.46
+  cornerChamferSpeed: 1.9
+  obstacleClearancePad: 0.095
+  releaseFlickMomentum: 0.08
+  maxFlickDistanceCells: 0.7
+  releaseSnapDuration: 0.1
+  mergeRequiredAlignment: 0.34
+  mergePenetrationThreshold: 0.14
+  mergeSuckInDuration: 0.085
+  mergeCooldown: 0.08
+  jellyVelocityStretch: 0.11
+  jellyVelocityTiltAngle: 5.5
+  jellyMergePopDuration: 0.3
