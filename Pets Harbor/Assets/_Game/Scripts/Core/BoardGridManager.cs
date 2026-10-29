@@ -464,12 +464,15 @@ namespace PetsHarbor.SlideMerge
                     if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop &&
                         crossedCol != startIntX &&
                         Mathf.Abs(current.x - crossedCol) < 0.22f &&
-                        Mathf.Abs(desiredX - crossedCol) < 0.50f &&
                         HasPerpendicularMergeOpportunity(block, crossedCol, Mathf.RoundToInt(roundY), true, out _, out _))
                     {
-                        current.x = crossedCol;
-                        stoppedAtInteger = true;
-                        return false;
+                        float breakoutThreshold = 0.85f * Mathf.Max(0.5f, GameFeelConfig.Instance.partnerAlignmentMagnetStrength);
+                        if (Mathf.Abs(desiredX - crossedCol) <= breakoutThreshold)
+                        {
+                            current.x = crossedCol;
+                            stoppedAtInteger = true;
+                            return false;
+                        }
                     }
                 }
                 else
@@ -541,12 +544,15 @@ namespace PetsHarbor.SlideMerge
                     if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop &&
                         crossedRow != startIntY &&
                         Mathf.Abs(current.y - crossedRow) < 0.22f &&
-                        Mathf.Abs(desiredY - crossedRow) < 0.50f &&
                         HasPerpendicularMergeOpportunity(block, Mathf.RoundToInt(roundX), crossedRow, false, out _, out _))
                     {
-                        current.y = crossedRow;
-                        stoppedAtInteger = true;
-                        return false;
+                        float breakoutThreshold = 0.85f * Mathf.Max(0.5f, GameFeelConfig.Instance.partnerAlignmentMagnetStrength);
+                        if (Mathf.Abs(desiredY - crossedRow) <= breakoutThreshold)
+                        {
+                            current.y = crossedRow;
+                            stoppedAtInteger = true;
+                            return false;
+                        }
                     }
                 }
                 else
@@ -709,9 +715,10 @@ namespace PetsHarbor.SlideMerge
                     {
                         if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
                         {
-                            // Strict head-on alignment check: must align in X (>= 90%)
+                            // Strict head-on alignment check: must align in X (>= 85%)
                             float overlapX = Mathf.Min(col + w, obstacle.GridX + obstacle.GridWidth) - Mathf.Max(col, obstacle.GridX);
-                            if (overlapX / w >= 0.90f)
+                            float maxW = Mathf.Max(w, obstacle.GridWidth);
+                            if (overlapX / maxW >= 0.85f)
                             {
                                 perpSign = -1;
                                 targetPartner = obstacle;
@@ -732,7 +739,8 @@ namespace PetsHarbor.SlideMerge
                         if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
                         {
                             float overlapX = Mathf.Min(col + w, obstacle.GridX + obstacle.GridWidth) - Mathf.Max(col, obstacle.GridX);
-                            if (overlapX / w >= 0.90f)
+                            float maxW = Mathf.Max(w, obstacle.GridWidth);
+                            if (overlapX / maxW >= 0.85f)
                             {
                                 perpSign = 1;
                                 targetPartner = obstacle;
@@ -755,7 +763,8 @@ namespace PetsHarbor.SlideMerge
                         if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
                         {
                             float overlapY = Mathf.Min(row + h, obstacle.GridY + obstacle.GridHeight) - Mathf.Max(row, obstacle.GridY);
-                            if (overlapY / h >= 0.90f)
+                            float maxH = Mathf.Max(h, obstacle.GridHeight);
+                            if (overlapY / maxH >= 0.85f)
                             {
                                 perpSign = -1;
                                 targetPartner = obstacle;
@@ -775,7 +784,8 @@ namespace PetsHarbor.SlideMerge
                         if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
                         {
                             float overlapY = Mathf.Min(row + h, obstacle.GridY + obstacle.GridHeight) - Mathf.Max(row, obstacle.GridY);
-                            if (overlapY / h >= 0.90f)
+                            float maxH = Mathf.Max(h, obstacle.GridHeight);
+                            if (overlapY / maxH >= 0.85f)
                             {
                                 perpSign = 1;
                                 targetPartner = obstacle;
@@ -783,6 +793,104 @@ namespace PetsHarbor.SlideMerge
                             }
                         }
                         break;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Scans forward along the active rail in 'directionSign' (+1 or -1) to find the nearest integer cell
+        /// that has an unobstructed perpendicular merge opportunity with a same-tier partner.
+        /// </summary>
+        public bool TryFindNearestAlignmentTargetAlongRail(
+            JellyBlock block,
+            float currentCoord,
+            int fixedOtherCoord,
+            bool isHorizontalRail,
+            int directionSign,
+            out int targetCoord,
+            out int perpSign,
+            out JellyBlock partnerBlock)
+        {
+            targetCoord = -1;
+            perpSign = 0;
+            partnerBlock = null;
+
+            if (block == null || block.IsMerging || directionSign == 0) return false;
+
+            if (isHorizontalRail)
+            {
+                int fixedRow = fixedOtherCoord;
+                if (directionSign > 0)
+                {
+                    int minCol = Mathf.FloorToInt(currentCoord + 0.05f) + 1;
+                    int maxCol = cols - block.GridWidth;
+                    for (int c = minCol; c <= maxCol; c++)
+                    {
+                        if (OverlapsSolidObstacle(block, c, fixedRow, false))
+                        {
+                            break;
+                        }
+                        if (HasPerpendicularMergeOpportunity(block, c, fixedRow, true, out perpSign, out partnerBlock))
+                        {
+                            targetCoord = c;
+                            return true;
+                        }
+                    }
+                }
+                else
+                {
+                    int maxCol = Mathf.CeilToInt(currentCoord - 0.05f) - 1;
+                    for (int c = maxCol; c >= 0; c--)
+                    {
+                        if (OverlapsSolidObstacle(block, c, fixedRow, false))
+                        {
+                            break;
+                        }
+                        if (HasPerpendicularMergeOpportunity(block, c, fixedRow, true, out perpSign, out partnerBlock))
+                        {
+                            targetCoord = c;
+                            return true;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                int fixedCol = fixedOtherCoord;
+                if (directionSign > 0)
+                {
+                    int minRow = Mathf.FloorToInt(currentCoord + 0.05f) + 1;
+                    int maxRow = rows - block.GridHeight;
+                    for (int r = minRow; r <= maxRow; r++)
+                    {
+                        if (OverlapsSolidObstacle(block, fixedCol, r, false))
+                        {
+                            break;
+                        }
+                        if (HasPerpendicularMergeOpportunity(block, fixedCol, r, false, out perpSign, out partnerBlock))
+                        {
+                            targetCoord = r;
+                            return true;
+                        }
+                    }
+                }
+                else
+                {
+                    int maxRow = Mathf.CeilToInt(currentCoord - 0.05f) - 1;
+                    for (int r = maxRow; r >= 0; r--)
+                    {
+                        if (OverlapsSolidObstacle(block, fixedCol, r, false))
+                        {
+                            break;
+                        }
+                        if (HasPerpendicularMergeOpportunity(block, fixedCol, r, false, out perpSign, out partnerBlock))
+                        {
+                            targetCoord = r;
+                            return true;
+                        }
                     }
                 }
             }
@@ -856,7 +964,8 @@ namespace PetsHarbor.SlideMerge
 
         /// <summary>
         /// Launches the block into a continuous momentum-driven coasting slide based on the player's push force.
-        /// Light push -> short slide (1 cell). Strong push -> glides across multiple cells with friction until hitting an obstacle or merging.
+        /// If an unobstructed perpendicular alignment with a same-tier partner is ahead, calculates the exact
+        /// slide distance to land squarely at that intersection so the player can immediately match with zero overshoot.
         /// </summary>
         public void LaunchBlockCoasting(JellyBlock block, Vector2 initialVelocity)
         {
@@ -868,7 +977,92 @@ namespace PetsHarbor.SlideMerge
                 return;
             }
 
+            // PRE-CALCULATE EXACT GLIDE DISTANCE TO PARTNER ALIGNMENT INTERSECTION:
+            if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop)
+            {
+                bool isHoriz = Mathf.Abs(initialVelocity.x) >= Mathf.Abs(initialVelocity.y);
+                if (isHoriz && Mathf.Abs(initialVelocity.x) > 0.15f)
+                {
+                    int signX = initialVelocity.x > 0 ? 1 : -1;
+                    int fixedRow = Mathf.RoundToInt(block.GridY);
+                    if (TryFindNearestAlignmentTargetAlongRail(block, block.GridX, fixedRow, true, signX, out int targetCol, out int perpSign, out JellyBlock partner))
+                    {
+                        StartCoroutine(GlideDirectlyToAlignmentIntersection(block, new Vector2(targetCol, fixedRow), perpSign, true, partner));
+                        return;
+                    }
+                }
+                else if (!isHoriz && Mathf.Abs(initialVelocity.y) > 0.15f)
+                {
+                    int signY = initialVelocity.y > 0 ? 1 : -1;
+                    int fixedCol = Mathf.RoundToInt(block.GridX);
+                    if (TryFindNearestAlignmentTargetAlongRail(block, block.GridY, fixedCol, false, signY, out int targetRow, out int perpSign, out JellyBlock partner))
+                    {
+                        StartCoroutine(GlideDirectlyToAlignmentIntersection(block, new Vector2(fixedCol, targetRow), perpSign, false, partner));
+                        return;
+                    }
+                }
+            }
+
             StartCoroutine(CoastingGlideRoutine(block, initialVelocity));
+        }
+
+        private IEnumerator GlideDirectlyToAlignmentIntersection(
+            JellyBlock block,
+            Vector2 targetGridPos,
+            int perpSign,
+            bool isHorizontal,
+            JellyBlock partner)
+        {
+            block.IsCoasting = true;
+            Vector2 startPos = new Vector2(block.GridX, block.GridY);
+            float totalDist = Vector2.Distance(startPos, targetGridPos);
+
+            if (totalDist <= 0.01f)
+            {
+                block.SetGridPositionFromDrag(targetGridPos.x, targetGridPos.y);
+                block.IsCoasting = false;
+                block.TriggerJellyBounce(0.18f);
+                SnapBlockToValidCell(block, isHorizontal ? new Vector2(0f, perpSign) : new Vector2(perpSign, 0f));
+                yield break;
+            }
+
+            // Snappy duration: 0.14s for 1 cell, 0.20s for 2 cells, capped at 0.32s
+            float duration = Mathf.Clamp(0.10f + totalDist * 0.055f, 0.14f, 0.32f);
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                if (block == null || !block.IsCoasting || block.IsBeingDragged || block.IsMerging)
+                {
+                    yield break;
+                }
+
+                elapsed += Time.deltaTime;
+                float p = Mathf.Clamp01(elapsed / duration);
+
+                // Smooth cubic ease-out deceleration: rapid launch, crisp arrival squarely at the intersection
+                float ease = 1f - Mathf.Pow(1f - p, 3f);
+                Vector2 curPos = Vector2.Lerp(startPos, targetGridPos, ease);
+
+                if (OverlapsSolidObstacle(block, curPos.x, curPos.y, false))
+                {
+                    break;
+                }
+
+                block.SetGridPositionFromDrag(curPos.x, curPos.y);
+                Vector2 stepVel = (targetGridPos - startPos) * (3f * (1f - p) * (1f - p) / duration);
+                block.SetDragVelocity(stepVel);
+
+                yield return null;
+            }
+
+            if (block != null && !block.IsBeingDragged && !block.IsMerging)
+            {
+                block.IsCoasting = false;
+                block.SetGridPositionFromDrag(targetGridPos.x, targetGridPos.y);
+                block.TriggerJellyBounce(0.18f);
+                SnapBlockToValidCell(block, isHorizontal ? new Vector2(0f, perpSign) : new Vector2(perpSign, 0f));
+            }
         }
 
         private IEnumerator CoastingGlideRoutine(JellyBlock block, Vector2 velocity)
@@ -1038,25 +1232,29 @@ namespace PetsHarbor.SlideMerge
                     biasedX = curRoundCol;
                     biasedY = curRoundRow;
                 }
-                // Priority 2: In direction of intent, adjacent integer cell has opportunity
+                // Priority 2: In direction of intent, find alignment opportunity along the corridor
                 else if (Mathf.Abs(intentDir.x) > 0.15f)
                 {
-                    int aheadCol = Mathf.Clamp(curRoundCol + (intentDir.x > 0 ? 1 : -1), 0, cols - block.GridWidth);
-                    if (!OverlapsSolidObstacle(block, aheadCol, curRoundRow, false) &&
-                        HasPerpendicularMergeOpportunity(block, aheadCol, curRoundRow, true, out _, out _))
+                    int signX = intentDir.x > 0 ? 1 : -1;
+                    if (TryFindNearestAlignmentTargetAlongRail(block, block.GridX, curRoundRow, true, signX, out int targetCol, out _, out _))
                     {
-                        biasedX = aheadCol;
-                        biasedY = curRoundRow;
+                        if (Mathf.Abs(targetCol - block.GridX) <= 2.5f)
+                        {
+                            biasedX = targetCol;
+                            biasedY = curRoundRow;
+                        }
                     }
                 }
                 else if (Mathf.Abs(intentDir.y) > 0.15f)
                 {
-                    int aheadRow = Mathf.Clamp(curRoundRow + (intentDir.y > 0 ? 1 : -1), 0, rows - block.GridHeight);
-                    if (!OverlapsSolidObstacle(block, curRoundCol, aheadRow, false) &&
-                        HasPerpendicularMergeOpportunity(block, curRoundCol, aheadRow, false, out _, out _))
+                    int signY = intentDir.y > 0 ? 1 : -1;
+                    if (TryFindNearestAlignmentTargetAlongRail(block, block.GridY, curRoundCol, false, signY, out int targetRow, out _, out _))
                     {
-                        biasedX = curRoundCol;
-                        biasedY = aheadRow;
+                        if (Mathf.Abs(targetRow - block.GridY) <= 2.5f)
+                        {
+                            biasedX = curRoundCol;
+                            biasedY = targetRow;
+                        }
                     }
                 }
             }

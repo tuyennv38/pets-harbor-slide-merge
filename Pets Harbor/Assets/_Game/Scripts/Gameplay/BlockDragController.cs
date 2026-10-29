@@ -283,7 +283,7 @@ namespace PetsHarbor.SlideMerge
                 : releasedBlock.GridVelocity;
 
             float pushSpeed = pushVel.magnitude;
-            if (pushSpeed > 2.2f && feel.pushForcePower > 0.05f)
+            if (pushSpeed > 1.4f && feel.pushForcePower > 0.05f)
             {
                 // Align push impulse strictly to the active orthogonal grid rail so the block glides cleanly along the row/column
                 if (Mathf.Abs(pushVel.x) >= Mathf.Abs(pushVel.y))
