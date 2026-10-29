@@ -17,4 +17,6 @@ MonoBehaviour:
   dragResponsiveness: 75
   gridMagnetStrength: 0.856
   cornerSlideAssist: 0.7
-  mergeSensitivity: 1
+  mergeSensitivity: 0.5
+  enableSmartPartnerAlignmentStop: 1
+  partnerAlignmentMagnetStrength: 0.85
