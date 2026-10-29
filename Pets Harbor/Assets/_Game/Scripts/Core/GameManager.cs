@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
 
@@ -62,6 +63,13 @@ namespace PetsHarbor.SlideMerge
             cam.fieldOfView = fov;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 60f;
+            cam.allowHDR = false;
+
+            var uCam = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            if (uCam != null)
+            {
+                uCam.renderPostProcessing = false;
+            }
 
             float halfFovRad = fov * 0.5f * Mathf.Deg2Rad;
             float tanHalfV = Mathf.Tan(halfFovRad);
@@ -163,21 +171,27 @@ namespace PetsHarbor.SlideMerge
         public void TriggerAutoMergeStep()
         {
             if (IsGameWon || _isAutoStepping || _board == null) return;
-            if (_board.TryFindHintPair(out JellyBlock from, out JellyBlock to))
+            if (_board.TryFindHintPairWithPath(out JellyBlock from, out JellyBlock to, out List<Vector2Int> path))
             {
-                StartCoroutine(AutoSlidePairRoutine(from, to));
+                StartCoroutine(AutoSlidePairRoutine(from, to, path));
             }
         }
 
-        private IEnumerator AutoSlidePairRoutine(JellyBlock from, JellyBlock to)
+        private IEnumerator AutoSlidePairRoutine(JellyBlock from, JellyBlock to, List<Vector2Int> path)
         {
             _isAutoStepping = true;
-            if (from != null && to != null)
+            if (from != null && to != null && path != null && path.Count > 0)
             {
-                Vector3 endWorld = to.transform.position;
                 from.transform.DOKill();
-                from.transform.DOMove(endWorld, 0.22f).SetEase(Ease.OutQuad);
-                yield return new WaitForSeconds(0.22f);
+                float stepDuration = Mathf.Clamp(0.24f / Mathf.Max(1, path.Count - 1), 0.045f, 0.085f);
+
+                for (int i = 1; i < path.Count; i++)
+                {
+                    if (from == null || to == null) break;
+                    Vector2Int cell = path[i];
+                    from.SetGridPositionSmooth(cell.x, cell.y, stepDuration);
+                    yield return new WaitForSeconds(stepDuration);
+                }
 
                 if (from != null && to != null)
                 {

@@ -17,8 +17,12 @@ namespace PetsHarbor.SlideMerge
 
         private Camera _mainCam;
         private Plane _dragPlane;
-        private Vector2 _grabGridOffset;
+        private Vector2 _virtualTargetGridPos;
+        private Vector2 _anchorGridCell;
+        private Vector2 _slideIntentDir;
         private Vector2 _lastPointerGridPos;
+        private Vector2 _smoothedPointerVel;
+        private Vector2 _recentPushVelocity;
         private float _mergeCooldownTimer;
         private bool _reanchorAfterMerge;
 
@@ -151,12 +155,17 @@ namespace PetsHarbor.SlideMerge
             if (pickedBlock != null && !pickedBlock.IsMerging)
             {
                 CurrentDraggedBlock = pickedBlock;
+                CurrentDraggedBlock.IsCoasting = false;
                 CurrentDraggedBlock.IsBeingDragged = true;
                 CurrentDraggedBlock.TriggerJellyBounce(0.16f);
 
                 Vector2 pointerGrid = BoardGridManager.Instance.WorldToGridPoint(CurrentPointerWorldPos);
-                _grabGridOffset = new Vector2(pickedBlock.GridX, pickedBlock.GridY) - pointerGrid;
+                _anchorGridCell = new Vector2(pickedBlock.GridX, pickedBlock.GridY);
+                _virtualTargetGridPos = pointerGrid - _anchorGridCell; // Stores exact 1:1 grab offset on the block!
+                _slideIntentDir = Vector2.zero;
                 _lastPointerGridPos = pointerGrid;
+                _smoothedPointerVel = Vector2.zero;
+                _recentPushVelocity = Vector2.zero;
                 _reanchorAfterMerge = false;
             }
         }
@@ -173,10 +182,36 @@ namespace PetsHarbor.SlideMerge
             Vector2 pointerGrid = BoardGridManager.Instance.WorldToGridPoint(hitPoint);
 
             float dt = Mathf.Max(0.001f, Time.deltaTime);
-            Vector2 pointerVel = (pointerGrid - _lastPointerGridPos) / dt;
+            Vector2 pointerDelta = pointerGrid - _lastPointerGridPos;
+            Vector2 rawPointerVel = pointerDelta / dt;
             _lastPointerGridPos = pointerGrid;
 
-            // While the short merge suck-in is playing (~0.085s), keep offset synced to the pointer
+            // Smooth pointer velocity & preserve peak push velocity over a short ~75ms window
+            _smoothedPointerVel = Vector2.Lerp(_smoothedPointerVel, rawPointerVel, 1f - Mathf.Exp(-38f * dt));
+            if (_smoothedPointerVel.sqrMagnitude >= _recentPushVelocity.sqrMagnitude * 0.65f ||
+                Vector2.Dot(_smoothedPointerVel, _recentPushVelocity) < 0f)
+            {
+                _recentPushVelocity = _smoothedPointerVel;
+            }
+            else
+            {
+                _recentPushVelocity = Vector2.MoveTowards(_recentPushVelocity, _smoothedPointerVel, 22f * dt);
+            }
+
+            // Track player's directional slide intent from pointer movement
+            if (pointerDelta.sqrMagnitude > 0.0001f)
+            {
+                if (Mathf.Abs(pointerDelta.x) >= Mathf.Abs(pointerDelta.y))
+                {
+                    _slideIntentDir = new Vector2(Mathf.Sign(pointerDelta.x), 0f);
+                }
+                else
+                {
+                    _slideIntentDir = new Vector2(0f, Mathf.Sign(pointerDelta.y));
+                }
+            }
+
+            // While the short merge suck-in is playing, wait to re-anchor grab offset to the newly evolved block
             if (CurrentDraggedBlock.IsMerging)
             {
                 _reanchorAfterMerge = true;
@@ -187,23 +222,17 @@ namespace PetsHarbor.SlideMerge
             {
                 _reanchorAfterMerge = false;
                 CurrentDraggedBlock.IsBeingDragged = true;
-                _grabGridOffset = new Vector2(CurrentDraggedBlock.GridX, CurrentDraggedBlock.GridY) - pointerGrid;
+                _virtualTargetGridPos = new Vector2(
+                    Mathf.Clamp(pointerGrid.x - CurrentDraggedBlock.GridX, 0.1f, CurrentDraggedBlock.GridWidth - 0.1f),
+                    Mathf.Clamp(pointerGrid.y - CurrentDraggedBlock.GridY, 0.1f, CurrentDraggedBlock.GridHeight - 0.1f));
+                _anchorGridCell = new Vector2(Mathf.Round(CurrentDraggedBlock.GridX), Mathf.Round(CurrentDraggedBlock.GridY));
             }
 
             GameFeelConfig feel = GameFeelConfig.Instance;
-            Vector2 desiredGridPos = pointerGrid + _grabGridOffset;
 
-            // Soft Magnetic Grid Pull while holding pointer nearly stationary so the block always feels attracted to its grid cell
-            float pointerSpeed = pointerVel.magnitude;
-            if (pointerSpeed < feel.idleMagneticSpeedThreshold && feel.idleMagneticPullStrength > 0.01f)
-            {
-                float magStrength = Mathf.InverseLerp(feel.idleMagneticSpeedThreshold, 0.05f, pointerSpeed) * feel.idleMagneticPullStrength * dt;
-                Vector2 nearestCell = new Vector2(
-                    Mathf.Clamp(Mathf.Round(CurrentDraggedBlock.GridX), 0f, BoardGridManager.Instance.cols - CurrentDraggedBlock.GridWidth),
-                    Mathf.Clamp(Mathf.Round(CurrentDraggedBlock.GridY), 0f, BoardGridManager.Instance.rows - CurrentDraggedBlock.GridHeight));
-                desiredGridPos = Vector2.Lerp(desiredGridPos, nearestCell, Mathf.Clamp01(magStrength));
-                _grabGridOffset = desiredGridPos - pointerGrid;
-            }
+            // 1:1 Direct Pointer Tracking:
+            // Desired block position is directly where the mouse cursor is holding the block (pointerGrid - grabOffset).
+            Vector2 desiredGridPos = pointerGrid - _virtualTargetGridPos;
 
             Vector2 prevPos = new Vector2(CurrentDraggedBlock.GridX, CurrentDraggedBlock.GridY);
             bool allowMerge = _mergeCooldownTimer <= 0f;
@@ -215,11 +244,10 @@ namespace PetsHarbor.SlideMerge
 
             if (merged)
             {
-                _mergeCooldownTimer = feel.mergeCooldown;
+                _mergeCooldownTimer = feel.MergeCooldown;
                 if (mergedResult != null && mergedResult.Tier < TierDatabase.MaxTier)
                 {
                     CurrentDraggedBlock = mergedResult;
-                    _grabGridOffset = new Vector2(mergedResult.GridX, mergedResult.GridY) - pointerGrid;
                     _reanchorAfterMerge = true;
                 }
                 else
@@ -233,21 +261,6 @@ namespace PetsHarbor.SlideMerge
             if (CurrentDraggedBlock != null)
             {
                 Vector2 actualPos = new Vector2(CurrentDraggedBlock.GridX, CurrentDraggedBlock.GridY);
-
-                // Dynamic Leash Clamping: prevent the virtual grab point from pulling far past a solid wall,
-                // eliminating sticky wall friction when changing slide direction (L-turns)
-                float maxWallLeash = feel.maxWallLeashCells;
-                Vector2 leashError = desiredGridPos - actualPos;
-                if (Mathf.Abs(leashError.x) > maxWallLeash)
-                {
-                    desiredGridPos.x = actualPos.x + Mathf.Sign(leashError.x) * maxWallLeash;
-                }
-                if (Mathf.Abs(leashError.y) > maxWallLeash)
-                {
-                    desiredGridPos.y = actualPos.y + Mathf.Sign(leashError.y) * maxWallLeash;
-                }
-                _grabGridOffset = desiredGridPos - pointerGrid;
-
                 Vector2 actualVel = (actualPos - prevPos) / dt;
                 CurrentDraggedBlock.SetDragVelocity(actualVel);
             }
@@ -255,15 +268,40 @@ namespace PetsHarbor.SlideMerge
 
         private void ReleaseDraggedBlock()
         {
-            if (CurrentDraggedBlock != null)
+            if (CurrentDraggedBlock == null) return;
+
+            JellyBlock releasedBlock = CurrentDraggedBlock;
+            releasedBlock.IsBeingDragged = false;
+            CurrentDraggedBlock = null;
+            _reanchorAfterMerge = false;
+
+            if (releasedBlock.IsMerging || BoardGridManager.Instance == null) return;
+
+            GameFeelConfig feel = GameFeelConfig.Instance;
+            Vector2 pushVel = _recentPushVelocity.sqrMagnitude > releasedBlock.GridVelocity.sqrMagnitude
+                ? _recentPushVelocity
+                : releasedBlock.GridVelocity;
+
+            float pushSpeed = pushVel.magnitude;
+            if (pushSpeed > 2.2f && feel.pushForcePower > 0.05f)
             {
-                CurrentDraggedBlock.IsBeingDragged = false;
-                if (!CurrentDraggedBlock.IsMerging)
+                // Align push impulse strictly to the active orthogonal grid rail so the block glides cleanly along the row/column
+                if (Mathf.Abs(pushVel.x) >= Mathf.Abs(pushVel.y))
                 {
-                    BoardGridManager.Instance.SnapBlockToValidCell(CurrentDraggedBlock);
+                    pushVel.y = 0f;
                 }
-                CurrentDraggedBlock = null;
-                _reanchorAfterMerge = false;
+                else
+                {
+                    pushVel.x = 0f;
+                }
+
+                Vector2 launchVel = Vector2.ClampMagnitude(pushVel * feel.pushForcePower, 28f);
+                BoardGridManager.Instance.LaunchBlockCoasting(releasedBlock, launchVel);
+            }
+            else
+            {
+                // On a gentle slide or release without a strong flick, snap smoothly to the grid cell in _slideIntentDir
+                BoardGridManager.Instance.SnapBlockToValidCell(releasedBlock, _slideIntentDir);
             }
         }
     }

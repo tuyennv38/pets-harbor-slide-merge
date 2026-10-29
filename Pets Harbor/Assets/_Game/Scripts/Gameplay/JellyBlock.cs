@@ -246,7 +246,7 @@ namespace PetsHarbor.SlideMerge
                 Vector3 targetWorld = _board.GridToWorldPosition(GridX, GridY, GridWidth, GridHeight);
                 if (Application.isPlaying && Time.deltaTime > 0f)
                 {
-                    float sharpness = GameFeelConfig.Instance.dragFollowSharpness;
+                    float sharpness = GameFeelConfig.Instance.DragFollowSharpness;
                     float followT = 1f - Mathf.Exp(-sharpness * Time.deltaTime);
                     transform.position = Vector3.Lerp(transform.position, targetWorld, followT);
                 }
@@ -437,8 +437,8 @@ namespace PetsHarbor.SlideMerge
             if (IsBeingDragged || IsCoasting)
             {
                 GameFeelConfig feel = GameFeelConfig.Instance;
-                float maxStretch = feel.jellyVelocityStretch;
-                float maxTilt = feel.jellyVelocityTiltAngle;
+                float maxStretch = feel.JellyVelocityStretch;
+                float maxTilt = feel.JellyVelocityTiltAngle;
 
                 float stretchX = Mathf.Clamp(Mathf.Abs(_smoothedVelocity.x) * 0.012f, 0f, maxStretch);
                 float stretchZ = Mathf.Clamp(Mathf.Abs(_smoothedVelocity.y) * 0.012f, 0f, maxStretch);

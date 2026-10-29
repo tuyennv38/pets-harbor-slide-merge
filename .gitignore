@@ -51,10 +51,11 @@ sysinfo.txt
 # Crashlytics generated file
 crashlytics-build.properties
 
-# Blender backup files & temporary screen recordings
+# Blender backup files, videos & temporary screen recordings
 *.blend1
 *.blend2
-Recording*.mp4
+*.mp4
+**/.utmp/
 **/Assets/Screenshots/
 **/Assets/Screenshots.meta
 

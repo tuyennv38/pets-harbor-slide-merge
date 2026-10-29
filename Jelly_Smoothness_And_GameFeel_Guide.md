@@ -192,3 +192,70 @@ Trong [`JellyBlock.cs`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%
 | **Hiệu ứng Squash & Stretch** | Cộng/trừ tuyến tính `sx, sy, sz` trong [`JellyBlock.cs`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%20From%20Creative/Pets%20Harbor/Assets/_Game/Scripts/Gameplay/JellyBlock.cs#L353-L390). | Áp dụng công thức **Bảo toàn thể tích** ($S_y = \frac{1}{S_x \cdot S_z}$) để khối thạch phồng/xẹp tự nhiên hơn. |
 | **Hiển thị Mặt Emoji** | `Quad` phẳng `Unlit/Transparent` đặt trên đỉnh khối trong [`JellyBlock.cs`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%20From%20Creative/Pets%20Harbor/Assets/_Game/Scripts/Gameplay/JellyBlock.cs#L87-L95). | Hòa trộn trực tiếp `FaceTexture` vào Texture đỉnh của `JellyBoxMesh` (dưới lớp `Lit Smoothness = 0.90`) để mặt cong theo vòm thạch và bắt sáng bóng kính. |
 | **Bóng tiếp xúc đáy khay** | Chỉ dùng Directional Light Shadow mặc định. | Thêm **Soft Contact Shadow Blob** dưới đáy mỗi viên thạch để tách biệt rõ khối 3D với mặt khay gỗ. |
+
+---
+
+## PHẦN 5: PHÂN TÍCH CƠ CHẾ LỰC ĐẨY & QUÁN TÍNH TRƯỢT (VELOCITY-DRIVEN PUSH & GLIDE)
+
+Khi phân tích kỹ video gốc và đối chiếu với thao tác chuột thực tế (`Recording 2026-10-28 161214.mp4` & `163249.mp4`), điểm khác biệt cốt lõi tạo nên cảm giác **"đẩy nhẹ đi ngắn, đẩy mạnh đi dài, như truyền lực thật vào viên thạch"** nằm ở 3 cơ chế vật lý sau:
+
+1. **Bộ Nhớ Đỉnh Vận Tốc Cửa Sổ Ngắn (`Peak Push Velocity Window ~75ms`):**
+   - Trong thực tế, khi người chơi vẩy chuột nhanh rồi nhả nút chuột (`MouseUp`), bàn tay thường khựng lại khoảng `1–2 frame` (`16ms–33ms`) ngay khoảnh khắc nhả ngón tay. Nếu chỉ lấy vận tốc ở đúng frame nhả chuột, vận tốc thường tụt về `0` khiến viên thạch đứng khựng lại.
+   - **Giải pháp trong [`BlockDragController.cs`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%20From%20Creative/Pets%20Harbor/Assets/_Game/Scripts/Gameplay/BlockDragController.cs):** Lưu trữ vận tốc đỉnh trong cửa sổ `~75ms` (`_recentPushVelocity` giảm dần chậm với `decayRate = 13.5f`). Khi nhả chuột, khối thạch nhận đúng lực vẩy mạnh nhất vừa thực hiện.
+
+2. **Khuếch Đại Lực Đẩy Tỷ Lệ Với Tốc Độ Chuột (`Velocity-Sensitive Push Gain`):**
+   - Khi di chuyển chuột chậm ($v < 3.5\text{ ô/s}$), hệ số khuếch đại bằng `1.0` để người chơi đặt khối chính xác từng ô.
+   - Khi vẩy chuột nhanh ($v > 3.5\text{ ô/s}$), độ nhạy đẩy tăng dần theo công thức:
+     $$\text{pushGain} = 1.0 + \text{Clamp01}\left(\frac{v - 3.5}{18.0}\right) \times (\text{pushForcePower} \times 0.42)$$
+   - Nhờ đó, một cú hất chuột nhẹ nhàng sẽ đẩy viên thạch vọt đi nhanh và thanh thoát hơn hẳn kéo tĩnh.
+
+3. **Trượt Quán Tính Đa Ô Có Ma Sát (`Multi-Cell Momentum Coasting`):**
+   - Khi thả chuột với vận tốc vượt ngưỡng (`> 1.8 ô/s`), thay vì khóa cứng vào ô gần nhất ngay lập tức, [`BoardGridManager.LaunchBlockCoasting`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%20From%20Creative/Pets%20Harbor/Assets/_Game/Scripts/Core/BoardGridManager.cs) kích hoạt Coroutine trượt quán tính theo từng frame:
+     - Vận tốc ban đầu: $\vec{v}_0 = \vec{v}_{\text{push}} \times (0.55 + \text{pushForcePower} \times 0.45)$.
+     - Mỗi frame, khối thạch trượt qua các ô trống theo hàm `SlideBlockContinuous`, tự động căn thẳng hàng vào rãnh (`LaneCentering`), tự nảy nhẹ nếu chạm tường và **tự động kích hoạt Merge ngay trên đường trượt** nếu tông trúng khối cùng cấp!
+     - Vận tốc giảm dần tự nhiên theo ma sát mặt khay (`slideFriction`). Khi tốc độ giảm xuống dưới `1.35 ô/s`, nam châm tâm ô sẽ hút êm khối thạch vào đúng tâm ô nguyên gần nhất.
+
+---
+
+## PHẦN 6: LƯU TRỮ BẢNG THÔNG SỐ CẤU HÌNH GAME FEEL (`GameFeelConfig`)
+
+### 6.1. Bảng 6 Thanh Trượt Cốt Lõi Đã Co Gọn (6 Master Sliders trong [`GameFeelConfig.cs`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%20From%20Creative/Pets%20Harbor/Assets/_Game/Scripts/Core/GameFeelConfig.cs))
+
+Để dễ dàng tinh chỉnh trực tiếp trong Editor (`PetsHarbor -> Game Feel Tuner (Sliders)` hoặc trên `GameManager` Inspector), toàn bộ hệ thống vật lý đã được gom gọn thành **6 thanh trượt chủ đạo**:
+
+| STT | Tên Biến (`GameFeelConfig`) | Khoảng Giá Trị | Chuẩn Cân Bằng (Default) | Preset Siêu Trơn (Ice Glide) | Preset Hút Grid Mạnh (Magnetic) | Ý Nghĩa Tác Động |
+| :-: | :--- | :---: | :---: | :---: | :---: | :--- |
+| **1** | `pushForcePower` | `0.0 – 3.0` | **`1.40`** | `2.10` | `1.10` | **Lực đẩy vẩy tay:** Quyết định độ văng theo lực chuột. Kéo nhẹ đi 1 ô, vẩy mạnh trượt dài nhiều ô. |
+| **2** | `slideFriction` | `2.0 – 25.0` | **`7.50`** | `4.20` | `11.00` | **Ma sát mặt khay:** Càng nhỏ thì khối thạch trượt quán tính càng xa như trên mặt băng; càng lớn thì dừng lại càng nhanh. |
+| **3** | `dragResponsiveness` | `15.0 – 90.0` | **`60.0`** | `78.0` | `55.0` | **Độ nhạy bám chuột:** Tốc độ viên thạch bám sát con trỏ chuột khi đang giữ kéo. |
+| **4** | `gridMagnetStrength` | `0.0 – 1.0` | **`0.72`** | `0.48` | `0.95` | **Lực hút rãnh & tâm ô:** Giữ viên thạch luôn đi thẳng trong rãnh ngang/dọc và hút êm vào tâm ô khi di chuyển chậm. |
+| **5** | `cornerSlideAssist` | `0.0 – 1.0` | **`0.85`** | `0.98` | `0.80` | **Trợ lực lách góc chữ L:** Tự động bo tròn qua mép các khối cản khi cua gấp vào hẻm hẹp. |
+| **6** | `mergeSensitivity` | `0.2 – 1.0` | **`0.82`** | `0.90` | `0.78` | **Độ nhạy hút Merge:** Khoảng cách và tốc độ tự hút chập 2 khối cùng cấp khi trượt chạm nhau. |
+
+---
+
+### 6.2. Bảng Tham Chiếu Chi Tiết 17 Thông Số Vật Lý Nội Bộ (Lưu Trữ Đầy Đủ)
+
+Dưới đây là bảng lưu trữ toàn bộ 17 thông số chi tiết bên dưới hệ thống và công thức quy đổi tự động từ 6 thanh trượt chủ đạo trong [`GameFeelConfig.cs`](file:///d:/Company/Cscmobi/Projects/G23/REA/Demo%20Game%20From%20Creative/Pets%20Harbor/Assets/_Game/Scripts/Core/GameFeelConfig.cs):
+
+| Nhóm | Tên Thông Số Nội Bộ | Giá Trị Chuẩn Trước Đây | Công Thức Quy Đổi Từ 6 Slider Chính | Giải Thích Kỹ Thuật |
+| :--- | :--- | :---: | :--- | :--- |
+| **1. Bám Chuột & Dây Dẫn** | `DragFollowSharpness` | `58.0` | `= dragResponsiveness` | Hệ số hàm mũ `1 - Exp(-sharpness * dt)` cập nhật vị trí 3D. |
+| | `MaxWallLeashCells` | `0.60 ô` | `Lerp(1.1f, 0.45f, InverseLerp(15, 90, dragResponsiveness))` | Giới hạn khoảng cách dây dẫn ảo khi kéo xuyên vào tường để đổi hướng không bị trễ. |
+| | `maxSlideStepPerFrame` | `0.85 ô` | `0.95 ô` (cố định tối ưu) | Bước nhảy Swept AABB tối đa mỗi frame. |
+| **2. Hút Rãnh & Bo Góc** | `LaneCenteringStrength` | `20.0` | `Lerp(6f, 28f, gridMagnetStrength)` | Lực kéo trục phụ về rãnh nguyên gần nhất khi đang trượt nhanh theo trục chính. |
+| | `IdleMagneticPullStrength` | `12.5` | `Lerp(0f, 18f, gridMagnetStrength)` | Lực hút nhẹ tâm khối về tâm ô khi di chuyển chậm. |
+| | `IdleMagneticSpeedThreshold` | `4.2 ô/s` | `Lerp(1.5f, 5.0f, gridMagnetStrength)` | Ngưỡng vận tốc chuột bắt đầu kích hoạt lực hút tâm ô. |
+| | `CornerChamferRange` | `0.48 ô` | `Lerp(0.15f, 0.54f, cornerSlideAssist)` | Độ lệch mép tối đa được phép tự động trượt bo qua góc vuông. |
+| | `CornerChamferSpeed` | `26.0` | `Lerp(10f, 32f, cornerSlideAssist)` | Tốc độ đẩy ngang phụ trợ khi bo góc chữ L. |
+| | `ObstacleClearancePad` | `0.008 ô` | `Lerp(0.025f, 0.006f, cornerSlideAssist)` | Khe hở an toàn giữa các hộp va chạm AABB. |
+| **3. Quán Tính & Thả Tay** | `releaseFlickMomentum` | `0.075` | Thay bằng hệ `LaunchBlockCoasting` (`pushForcePower` + `slideFriction`) | Cơ chế trượt quán tính đa ô theo vận tốc vẩy chuột thực tế. |
+| | `ReleaseSnapDuration` | `0.075s` | `Lerp(0.11f, 0.055f, gridMagnetStrength)` | Thời gian tween hút khối về đúng tâm ô nguyên khi dừng hẳn. |
+| **4. Độ Nhạy Merge** | `MergeRequiredAlignment` | `0.58` | `Lerp(0.75f, 0.48f, mergeSensitivity)` | Tỷ lệ thẳng hàng tối thiểu giữa 2 khối cùng cấp để cho phép Merge. |
+| | `MergePenetrationThreshold` | `0.15 ô` | `Lerp(0.28f, 0.08f, mergeSensitivity)` | Độ lún tiếp xúc cần thiết để kích hoạt hút Merge. |
+| | `MergeSuckInDuration` | `0.078s` | `Lerp(0.11f, 0.068f, mergeSensitivity)` | Thời gian 2 khối lao vào tâm nhau khi hợp nhất. |
+| | `MergeCooldown` | `0.11s` | `Lerp(0.16f, 0.09f, mergeSensitivity)` | Thời gian nghỉ trước khi khối vừa tiến hóa có thể tiếp tục Merge chuỗi. |
+| **5. Đàn Hồi Thạch (Jelly)** | `JellyVelocityStretch` | `0.11` | `Clamp(0.07f + pushForcePower * 0.025f, 0.06f, 0.15f)` | Độ giãn dài thân thạch theo vận tốc trượt. |
+| | `JellyVelocityTiltAngle` | `4.5°` | `Clamp(2.5f + pushForcePower * 1.4f, 2f, 6.5f)` | Góc nghiêng thân thạch theo hướng trượt. |
+| | `JellyMergePopDuration` | `0.26s` | `0.26s` | Thời gian hiệu ứng nảy phồng `Overshoot -> Undershoot` khi lên cấp. |
+

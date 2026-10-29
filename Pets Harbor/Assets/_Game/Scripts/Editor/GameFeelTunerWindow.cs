@@ -119,48 +119,20 @@ namespace PetsHarbor.SlideMerge.Editor
                 scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
             }
 
-            // Section 1
-            DrawSection("1. Độ Trơn Trượt & Bám Chuột (Drag & Tracking)", new[]
+            // Section 1: Lực đẩy & Trượt quán tính (Push & Glide)
+            DrawSection("1. Lực Đẩy & Trượt Quán Tính (Velocity Push & Glide)", new[]
             {
-                ("dragFollowSharpness", "Tốc độ bám chuột (Follow Sharpness)"),
-                ("maxWallLeashCells", "Dây dẫn tối đa khi chạm tường (Wall Leash)"),
-                ("maxSlideStepPerFrame", "Quãng đường trượt tối đa/frame")
+                ("pushForcePower", "Lực đẩy vẩy tay (Push Power)"),
+                ("slideFriction", "Ma sát hãm trượt (Slide Friction)"),
+                ("dragResponsiveness", "Độ nhạy bám chuột (Drag Speed)")
             }, serializedConfig);
 
-            // Section 2
-            DrawSection("2. Lực Hút Rãnh Grid & Bo Góc Chữ L (Magnetic Grid & Corner)", new[]
+            // Section 2: Hút Rãnh Grid, Lách Góc & Độ Nhạy Merge
+            DrawSection("2. Hút Rãnh Grid, Lách Góc & Hợp Nhất (Grid & Merge)", new[]
             {
-                ("laneCenteringStrength", "Lực hút căn giữa rãnh ngang/dọc"),
-                ("idleMagneticPullStrength", "Lực hút tâm ô khi di chuyển nhẹ/chậm"),
-                ("idleMagneticSpeedThreshold", "Ngưỡng tốc độ bật lực hút tâm ô"),
-                ("cornerChamferRange", "Phạm vi tự trượt bo góc chữ L (ô)"),
-                ("cornerChamferSpeed", "Tốc độ đẩy bo góc lách khe"),
-                ("obstacleClearancePad", "Độ hở va chạm giữa các khối (Clearance)")
-            }, serializedConfig);
-
-            // Section 3
-            DrawSection("3. Quán Tính Vẩy Tay & Hút Ô Khi Thả Chuột (Flick & Snap)", new[]
-            {
-                ("releaseFlickMomentum", "Quán tính trượt tiếp khi vẩy thả tay"),
-                ("maxFlickDistanceCells", "Quãng đường vẩy quán tính tối đa (ô)"),
-                ("releaseSnapDuration", "Thời gian hút êm về ô khi thả chuột (s)")
-            }, serializedConfig);
-
-            // Section 4
-            DrawSection("4. Độ Nhạy Hút Merge Liên Hoàn (Merge & Combo)", new[]
-            {
-                ("mergeRequiredAlignment", "Độ thẳng hàng tối thiểu để Merge"),
-                ("mergePenetrationThreshold", "Độ chạm/lún kích hoạt Merge (ô)"),
-                ("mergeSuckInDuration", "Thời gian hút chập 2 khối (s)"),
-                ("mergeCooldown", "Thời gian nghỉ giữa 2 lần Merge liên tiếp (s)")
-            }, serializedConfig);
-
-            // Section 5
-            DrawSection("5. Hiệu Ứng Đàn Hồi Khối Thạch (Jelly Squash & Tilt)", new[]
-            {
-                ("jellyVelocityStretch", "Độ kéo giãn thạch khi trượt nhanh"),
-                ("jellyVelocityTiltAngle", "Góc nghiêng thạch khi trượt (độ)"),
-                ("jellyMergePopDuration", "Thời gian nảy phồng khi lên cấp (s)")
+                ("gridMagnetStrength", "Lực hút rãnh & tâm ô (Grid Magnet)"),
+                ("cornerSlideAssist", "Trợ lực bo góc chữ L (Corner Assist)"),
+                ("mergeSensitivity", "Độ nhạy hút Merge (Merge Sensitivity)")
             }, serializedConfig);
 
             if (useScrollView)
