@@ -451,12 +451,26 @@ namespace PetsHarbor.SlideMerge
             int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(targetX - current.x) / 0.12f));
             float stepX = (targetX - current.x) / steps;
 
+            int startIntX = Mathf.RoundToInt(current.x);
             for (int s = 0; s < steps; s++)
             {
                 float nextX = Mathf.Clamp(current.x + stepX, 0f, cols - block.GridWidth);
                 if (!OverlapsSolidObstacle(block, nextX, roundY, false))
                 {
                     current.x = nextX;
+
+                    // SMART PARTNER ALIGNMENT CATCH WHILE DRAGGING:
+                    int crossedCol = Mathf.RoundToInt(current.x);
+                    if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop &&
+                        crossedCol != startIntX &&
+                        Mathf.Abs(current.x - crossedCol) < 0.22f &&
+                        Mathf.Abs(desiredX - crossedCol) < 0.50f &&
+                        HasPerpendicularMergeOpportunity(block, crossedCol, Mathf.RoundToInt(roundY), true, out _, out _))
+                    {
+                        current.x = crossedCol;
+                        stoppedAtInteger = true;
+                        return false;
+                    }
                 }
                 else
                 {
@@ -514,12 +528,26 @@ namespace PetsHarbor.SlideMerge
             int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(targetY - current.y) / 0.12f));
             float stepY = (targetY - current.y) / steps;
 
+            int startIntY = Mathf.RoundToInt(current.y);
             for (int s = 0; s < steps; s++)
             {
                 float nextY = Mathf.Clamp(current.y + stepY, 0f, rows - block.GridHeight);
                 if (!OverlapsSolidObstacle(block, roundX, nextY, false))
                 {
                     current.y = nextY;
+
+                    // SMART PARTNER ALIGNMENT CATCH WHILE DRAGGING:
+                    int crossedRow = Mathf.RoundToInt(current.y);
+                    if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop &&
+                        crossedRow != startIntY &&
+                        Mathf.Abs(current.y - crossedRow) < 0.22f &&
+                        Mathf.Abs(desiredY - crossedRow) < 0.50f &&
+                        HasPerpendicularMergeOpportunity(block, Mathf.RoundToInt(roundX), crossedRow, false, out _, out _))
+                    {
+                        current.y = crossedRow;
+                        stoppedAtInteger = true;
+                        return false;
+                    }
                 }
                 else
                 {
@@ -651,6 +679,143 @@ namespace PetsHarbor.SlideMerge
             return false;
         }
 
+        /// <summary>
+        /// Checks if placing 'block' at integer cell (col, row) perfectly aligns with a same-tier merge partner
+        /// along the perpendicular axis, with an unobstructed path between them.
+        /// </summary>
+        public bool HasPerpendicularMergeOpportunity(
+            JellyBlock block,
+            int col,
+            int row,
+            bool movingHorizontalRail,
+            out int perpSign,
+            out JellyBlock targetPartner)
+        {
+            perpSign = 0;
+            targetPartner = null;
+            if (block == null || block.IsMerging) return false;
+
+            int w = block.GridWidth;
+            int h = block.GridHeight;
+
+            // 1. Moving along Horizontal rail -> Check Perpendicular Vertical lanes (Up: -1, Down: +1)
+            if (movingHorizontalRail)
+            {
+                // Check UP (signY = -1, lower row indices)
+                for (int r = row - 1; r >= 0; r--)
+                {
+                    JellyBlock obstacle = FindBlockCoveringArea(col, r, w, 1, block);
+                    if (obstacle != null)
+                    {
+                        if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
+                        {
+                            // Strict head-on alignment check: must align in X (>= 90%)
+                            float overlapX = Mathf.Min(col + w, obstacle.GridX + obstacle.GridWidth) - Mathf.Max(col, obstacle.GridX);
+                            if (overlapX / w >= 0.90f)
+                            {
+                                perpSign = -1;
+                                targetPartner = obstacle;
+                                return true;
+                            }
+                        }
+                        // Blocked by a different tier or misaligned block -> path is not clear
+                        break;
+                    }
+                }
+
+                // Check DOWN (signY = +1, higher row indices)
+                for (int r = row + h; r < rows; r++)
+                {
+                    JellyBlock obstacle = FindBlockCoveringArea(col, r, w, 1, block);
+                    if (obstacle != null)
+                    {
+                        if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
+                        {
+                            float overlapX = Mathf.Min(col + w, obstacle.GridX + obstacle.GridWidth) - Mathf.Max(col, obstacle.GridX);
+                            if (overlapX / w >= 0.90f)
+                            {
+                                perpSign = 1;
+                                targetPartner = obstacle;
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            // 2. Moving along Vertical rail -> Check Perpendicular Horizontal lanes (Left: -1, Right: +1)
+            else
+            {
+                // Check LEFT (signX = -1, lower col indices)
+                for (int c = col - 1; c >= 0; c--)
+                {
+                    JellyBlock obstacle = FindBlockCoveringArea(c, row, 1, h, block);
+                    if (obstacle != null)
+                    {
+                        if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
+                        {
+                            float overlapY = Mathf.Min(row + h, obstacle.GridY + obstacle.GridHeight) - Mathf.Max(row, obstacle.GridY);
+                            if (overlapY / h >= 0.90f)
+                            {
+                                perpSign = -1;
+                                targetPartner = obstacle;
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                // Check RIGHT (signX = +1, higher col indices)
+                for (int c = col + w; c < cols; c++)
+                {
+                    JellyBlock obstacle = FindBlockCoveringArea(c, row, 1, h, block);
+                    if (obstacle != null)
+                    {
+                        if (obstacle.Tier == block.Tier && !obstacle.IsMerging)
+                        {
+                            float overlapY = Mathf.Min(row + h, obstacle.GridY + obstacle.GridHeight) - Mathf.Max(row, obstacle.GridY);
+                            if (overlapY / h >= 0.90f)
+                            {
+                                perpSign = 1;
+                                targetPartner = obstacle;
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private JellyBlock FindBlockCoveringArea(float areaX, float areaY, float areaW, float areaH, JellyBlock ignore)
+        {
+            const float pad = 0.04f;
+            float x0 = areaX + pad;
+            float x1 = areaX + areaW - pad;
+            float y0 = areaY + pad;
+            float y1 = areaY + areaH - pad;
+
+            for (int i = 0; i < ActiveBlocks.Count; i++)
+            {
+                JellyBlock b = ActiveBlocks[i];
+                if (b == null || b == ignore || b.IsMerging) continue;
+
+                float bx0 = b.GridX + pad;
+                float bx1 = b.GridX + b.GridWidth - pad;
+                float by0 = b.GridY + pad;
+                float by1 = b.GridY + b.GridHeight - pad;
+
+                if (x0 < bx1 && x1 > bx0 && y0 < by1 && y1 > by0)
+                {
+                    return b;
+                }
+            }
+            return null;
+        }
+
         public bool IsCellPassableForBlock(JellyBlock block, int col, int row)
         {
             if (block == null) return false;
@@ -712,6 +877,8 @@ namespace PetsHarbor.SlideMerge
             block.SetDragVelocity(velocity);
 
             Vector2 lastMoveDir = velocity.sqrMagnitude > 0.001f ? velocity.normalized : Vector2.zero;
+            int startCol = Mathf.RoundToInt(block.GridX);
+            int startRow = Mathf.RoundToInt(block.GridY);
 
             while (block != null && block.IsCoasting && !block.IsBeingDragged && !block.IsMerging)
             {
@@ -729,6 +896,52 @@ namespace PetsHarbor.SlideMerge
 
                 Vector2 prevPos = new Vector2(block.GridX, block.GridY);
                 Vector2 targetPos = prevPos + velocity * dt;
+
+                // SMART ALIGNMENT STOP DURING COASTING / FLICKING:
+                // If the block glides past an integer cell that perfectly aligns with a same-tier partner,
+                // automatically brake and snap right at that alignment cell!
+                if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop)
+                {
+                    bool isHoriz = Mathf.Abs(velocity.x) >= Mathf.Abs(velocity.y);
+                    if (isHoriz && Mathf.Abs(velocity.x) > 0.15f)
+                    {
+                        int signX = velocity.x > 0 ? 1 : -1;
+                        float minX = Mathf.Min(prevPos.x, targetPos.x);
+                        float maxX = Mathf.Max(prevPos.x, targetPos.x);
+                        int checkCol = signX > 0 ? Mathf.FloorToInt(targetPos.x) : Mathf.CeilToInt(targetPos.x);
+
+                        if (checkCol != startCol && checkCol >= minX - 0.05f && checkCol <= maxX + 0.05f)
+                        {
+                            if (HasPerpendicularMergeOpportunity(block, checkCol, Mathf.RoundToInt(prevPos.y), true, out int perpSign, out _))
+                            {
+                                block.IsCoasting = false;
+                                block.SetGridPositionFromDrag(checkCol, prevPos.y);
+                                block.TriggerJellyBounce(0.18f);
+                                SnapBlockToValidCell(block, new Vector2(0f, perpSign));
+                                yield break;
+                            }
+                        }
+                    }
+                    else if (!isHoriz && Mathf.Abs(velocity.y) > 0.15f)
+                    {
+                        int signY = velocity.y > 0 ? 1 : -1;
+                        float minY = Mathf.Min(prevPos.y, targetPos.y);
+                        float maxY = Mathf.Max(prevPos.y, targetPos.y);
+                        int checkRow = signY > 0 ? Mathf.FloorToInt(targetPos.y) : Mathf.CeilToInt(targetPos.y);
+
+                        if (checkRow != startRow && checkRow >= minY - 0.05f && checkRow <= maxY + 0.05f)
+                        {
+                            if (HasPerpendicularMergeOpportunity(block, Mathf.RoundToInt(prevPos.x), checkRow, false, out int perpSign, out _))
+                            {
+                                block.IsCoasting = false;
+                                block.SetGridPositionFromDrag(prevPos.x, checkRow);
+                                block.TriggerJellyBounce(0.18f);
+                                SnapBlockToValidCell(block, new Vector2(perpSign, 0f));
+                                yield break;
+                            }
+                        }
+                    }
+                }
 
                 if (SlideBlockWithCollision(block, targetPos, true, out _))
                 {
@@ -809,6 +1022,43 @@ namespace PetsHarbor.SlideMerge
             if (Mathf.Abs(intentDir.y) > 0.15f)
             {
                 biasedY += Mathf.Sign(intentDir.y) * intentBias;
+            }
+
+            // Smart Partner Alignment Snap on Release:
+            // If the block is within range of an alignment opportunity cell, snap directly into alignment!
+            if (GameFeelConfig.Instance.enableSmartPartnerAlignmentStop)
+            {
+                int curRoundCol = Mathf.Clamp(Mathf.RoundToInt(block.GridX), 0, cols - block.GridWidth);
+                int curRoundRow = Mathf.Clamp(Mathf.RoundToInt(block.GridY), 0, rows - block.GridHeight);
+
+                // Priority 1: Current integer cell has opportunity
+                if (!OverlapsSolidObstacle(block, curRoundCol, curRoundRow, false) &&
+                    HasPerpendicularMergeOpportunity(block, curRoundCol, curRoundRow, Mathf.Abs(intentDir.x) >= Mathf.Abs(intentDir.y), out _, out _))
+                {
+                    biasedX = curRoundCol;
+                    biasedY = curRoundRow;
+                }
+                // Priority 2: In direction of intent, adjacent integer cell has opportunity
+                else if (Mathf.Abs(intentDir.x) > 0.15f)
+                {
+                    int aheadCol = Mathf.Clamp(curRoundCol + (intentDir.x > 0 ? 1 : -1), 0, cols - block.GridWidth);
+                    if (!OverlapsSolidObstacle(block, aheadCol, curRoundRow, false) &&
+                        HasPerpendicularMergeOpportunity(block, aheadCol, curRoundRow, true, out _, out _))
+                    {
+                        biasedX = aheadCol;
+                        biasedY = curRoundRow;
+                    }
+                }
+                else if (Mathf.Abs(intentDir.y) > 0.15f)
+                {
+                    int aheadRow = Mathf.Clamp(curRoundRow + (intentDir.y > 0 ? 1 : -1), 0, rows - block.GridHeight);
+                    if (!OverlapsSolidObstacle(block, curRoundCol, aheadRow, false) &&
+                        HasPerpendicularMergeOpportunity(block, curRoundCol, aheadRow, false, out _, out _))
+                    {
+                        biasedX = curRoundCol;
+                        biasedY = aheadRow;
+                    }
+                }
             }
 
             int bestCol = Mathf.Clamp(Mathf.RoundToInt(biasedX), 0, cols - block.GridWidth);

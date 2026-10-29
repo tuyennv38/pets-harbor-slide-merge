@@ -50,6 +50,14 @@ namespace PetsHarbor.SlideMerge
         [Range(0.2f, 1.0f)]
         public float mergeSensitivity = 0.82f;
 
+        [Header("🎯 HỖ TRỢ GIÓNG HÀNG GHÉP ĐÔI (Smart Partner Alignment)")]
+        [Tooltip("7. TỰ ĐỘNG HÃM DỪNG KHI GIÓNG THẲNG KHỐI CÙNG CẤP: Khi trượt ngang/dọc, nếu lướt qua vị trí thẳng hàng với khối cùng cấp (đang có đường thoáng để hợp nhất), khối tự hãm dừng lại đúng ô gióng để người chơi đẩy thẳng vào ăn điểm mà không bị trượt lố.")]
+        public bool enableSmartPartnerAlignmentStop = true;
+
+        [Tooltip("Độ nhạy lực hút gióng hàng (Partner Alignment Magnet Strength): Giữ khối dính nhẹ vào ô thẳng hàng khi kéo chậm hoặc vẩy lướt.")]
+        [Range(0.2f, 1.0f)]
+        public float partnerAlignmentMagnetStrength = 0.85f;
+
         // --- Các thông số nội suy tự động từ 6 thanh trượt cốt lõi ---
         public float DragFollowSharpness => dragResponsiveness;
         public float MaxWallLeashCells => Mathf.Lerp(0.45f, 0.18f, cornerSlideAssist);
